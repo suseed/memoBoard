@@ -5,119 +5,142 @@
   <title>Sticky Notes Board</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <style>
-    html,body{margin:0;padding:0;height:100%;font-family:Arial,sans-serif}
-    body{display:flex;flex-direction:column;background:#f4f4f4}
-    #toolbar{display:flex;gap:8px;padding:10px;background:#333;color:#fff;align-items:center}
-    #toolbar button{padding:6px 12px;border:none;border-radius:4px;cursor:pointer;font-weight:600}
-    #toolbar button:hover{opacity:.8}
-    #board{flex:1;position:relative;overflow:auto}
-    .note{position:absolute;width:200px;min-height:120px;padding:10px;border-radius:6px;box-shadow:0 2px 6px rgba(0,0,0,.15);cursor:move;user-select:none;display:flex;flex-direction:column;gap:6px}
-    .note header{display:flex;justify-content:space-between;align-items:center}
-    .note header button{background:none;border:none;font-size:16px;cursor:pointer;font-weight:bold;line-height:1}
-    .note header button:hover{opacity:.75}
-    .note textarea{flex:1;border:none;resize:none;background:transparent;font-size:14px;font-family:inherit;line-height:1.4;outline:none}
+/* Layout */
+html,body{margin:0;padding:0;height:100%;font-family:Arial,Helvetica,sans-serif}
+body{display:flex;flex-direction:column;background:#f4f4f4}
+#toolbar{display:flex;gap:8px;align-items:center;padding:10px;background:#333;color:#fff}
+#board{flex:1;position:relative;overflow:auto}
+/* Note */
+.note{position:absolute;width:180px;min-height:120px;padding:32px 12px 12px 12px;border-radius:8px;box-shadow:0 3px 8px rgba(0,0,0,0.25);display:flex;flex-direction:column;cursor:move;user-select:none}
+.note textarea{flex:1;border:none;resize:none;background:transparent;font-size:14px;font-family:inherit;outline:none;cursor:text;word-break:break-word}
+.note-header{position:absolute;top:4px;right:4px;display:flex;gap:4px}
+.note-button{background:rgba(255,255,255,0.6);border:none;border-radius:4px;padding:2px 4px;font-size:14px;cursor:pointer}
+.note-button:hover{background:#fff}
   </style>
 </head>
 <body>
   <div id="toolbar">
-    <button id="addBtn">+ 새 메모</button>
+    <button id="addBtn">＋ 새 메모</button>
     <button id="saveBtn">💾 저장</button>
-    <button id="loadBtn">📂 불러오기</button>
-    <input type="file" id="fileInput" accept="application/json" style="display:none" />
+    <label for="loadInput" style="cursor:pointer"><span style="pointer-events:none">📂 불러오기</span></label>
+    <input id="loadInput" type="file" accept="application/json" style="display:none" />
   </div>
   <div id="board"></div>
 
-  <script>
-    const board = document.getElementById('board');
-    const addBtn  = document.getElementById('addBtn');
-    const saveBtn = document.getElementById('saveBtn');
-    const loadBtn = document.getElementById('loadBtn');
-    const fileInput = document.getElementById('fileInput');
+<script>
+const COLORS=["#fde68a","#bfdbfe","#fecaca","#c7d2fe","#bbf7d0","#fcd34d","#fdba74","#e9d5ff"];
+const board=document.getElementById("board");
+const addBtn=document.getElementById("addBtn");
+const saveBtn=document.getElementById("saveBtn");
+const loadInput=document.getElementById("loadInput");
+let z=1;
 
-    const colors = ['#fff9b1','#ffd6a5','#caffbf','#a0c4ff','#ffc6ff','#fffffc','#ffadad'];
-    let z = 1;
+addBtn.addEventListener("click",()=>addNote({x:20,y:20,text:"",color:COLORS[Math.floor(Math.random()*COLORS.length)]}));
 
-    addBtn.addEventListener('click', () => createNote({text:'',x:40,y:40,color:colors[0]}));
+function addNote({x,y,text,color}){
+  const note=document.createElement("div");
+  note.className="note";
+  note.style.left=x+"px";
+  note.style.top=y+"px";
+  note.style.backgroundColor=color;
+  note.dataset.colorIndex=COLORS.indexOf(color);
+  note.style.zIndex=z++;
 
-    saveBtn.addEventListener('click', saveNotes);
-    loadBtn.addEventListener('click', () => fileInput.click());
-    fileInput.addEventListener('change', handleFileLoad);
+  const header=document.createElement("div");
+  header.className="note-header";
 
-    function createNote({text,x,y,color}){
-      const note = document.createElement('div');
-      note.className = 'note';
-      note.style.background = color;
-      note.style.left = x + 'px';
-      note.style.top  = y + 'px';
-      note.style.zIndex = ++z;
+  const colorBtn=document.createElement("button");
+  colorBtn.className="note-button";
+  colorBtn.textContent="🎨";
+  colorBtn.title="색 변경";
 
-      note.innerHTML = `<header>
-          <button class="colorBtn">🎨</button>
-          <button class="delBtn">×</button>
-        </header>
-        <textarea placeholder="내용...">${text}</textarea>`;
+  const deleteBtn=document.createElement("button");
+  deleteBtn.className="note-button";
+  deleteBtn.textContent="×";
+  deleteBtn.title="삭제";
 
-      board.appendChild(note);
-      makeDraggable(note);
+  header.appendChild(colorBtn);
+  header.appendChild(deleteBtn);
+  note.appendChild(header);
 
-      note.querySelector('.colorBtn').addEventListener('click', () => {
-        const current = colors.indexOf(note.style.background);
-        note.style.background = colors[(current+1)%colors.length];
-      });
+  const textarea=document.createElement("textarea");
+  textarea.value=text;
+  note.appendChild(textarea);
+  board.appendChild(note);
 
-      note.querySelector('.delBtn').addEventListener('click', () => note.remove());
+  // Dragging
+  note.addEventListener("pointerdown",startDrag);
+
+  function startDrag(e){
+    if(e.target.closest(".note-button"))return; // ignore buttons
+    note.setPointerCapture(e.pointerId);
+    const startX=e.clientX;
+    const startY=e.clientY;
+    const origLeft=parseInt(note.style.left);
+    const origTop=parseInt(note.style.top);
+    note.style.zIndex=z++;
+    function onMove(ev){
+      note.style.left=origLeft+(ev.clientX-startX)+"px";
+      note.style.top=origTop+(ev.clientY-startY)+"px";
     }
-
-    function makeDraggable(el){
-      let offsetX, offsetY, isDown = false;
-      el.addEventListener('mousedown', (e) => {
-        if(e.target.tagName.toLowerCase() === 'textarea') return; // allow text selection
-        isDown = true;
-        el.style.zIndex = ++z;
-        offsetX = e.clientX - el.offsetLeft;
-        offsetY = e.clientY - el.offsetTop;
-      });
-      document.addEventListener('mousemove', (e) => {
-        if(!isDown) return;
-        el.style.left = (e.clientX - offsetX) + 'px';
-        el.style.top  = (e.clientY - offsetY) + 'px';
-      });
-      document.addEventListener('mouseup', () => {isDown=false;});
+    function up(){
+      note.removeEventListener("pointermove",onMove);
+      note.removeEventListener("pointerup",up);
     }
+    note.addEventListener("pointermove",onMove);
+    note.addEventListener("pointerup",up);
+  }
 
-    function saveNotes(){
-      const notes = [...document.querySelectorAll('.note')].map(n => ({
-        text: n.querySelector('textarea').value,
-        x:   parseInt(n.style.left),
-        y:   parseInt(n.style.top),
-        color: n.style.background
-      }));
-      const blob = new Blob([JSON.stringify(notes,null,2)], {type:'application/json'});
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'notes.json';
-      a.click();
-      URL.revokeObjectURL(url);
-    }
+  // Color cycle
+  colorBtn.addEventListener("click",e=>{
+    e.stopPropagation();
+    let idx=parseInt(note.dataset.colorIndex);
+    idx=(isNaN(idx)?0:idx+1)%COLORS.length;
+    note.dataset.colorIndex=idx;
+    note.style.backgroundColor=COLORS[idx];
+  });
 
-    function handleFileLoad(){
-      const file = fileInput.files[0];
-      if(!file) return;
-      const reader = new FileReader();
-      reader.onload = e => {
-        try{
-          const data = JSON.parse(e.target.result);
-          if(!Array.isArray(data)) throw new Error('Invalid format');
-          board.innerHTML = '';
-          data.forEach(obj => createNote(obj));
-        }catch(err){
-          alert('로드 실패: 올바른 JSON이 아닙니다');
-        }
-      };
-      reader.readAsText(file, 'utf-8');
-      fileInput.value = '';
+  // Delete
+  deleteBtn.addEventListener("click",e=>{
+    e.stopPropagation();
+    board.removeChild(note);
+  });
+}
+
+// Save
+saveBtn.addEventListener("click",()=>{
+  const data=[...board.querySelectorAll(".note")].map(n=>({
+    x:parseInt(n.style.left),
+    y:parseInt(n.style.top),
+    text:n.querySelector("textarea").value,
+    color:n.style.backgroundColor
+  }));
+  const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a");
+  a.href=url;
+  a.download="notes.json";
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+// Load
+loadInput.addEventListener("change",e=>{
+  const file=e.target.files[0];
+  if(!file)return;
+  const reader=new FileReader();
+  reader.onload=evt=>{
+    try{
+      const json=JSON.parse(evt.target.result);
+      board.innerHTML="";
+      json.forEach(n=>addNote(n));
+    }catch(err){
+      alert("잘못된 JSON 파일입니다.");
     }
-  </script>
+  };
+  reader.readAsText(file);
+  loadInput.value=""; // reset
+});
+</script>
 </body>
 </html>
